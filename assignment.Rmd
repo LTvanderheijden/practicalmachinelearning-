@@ -1,0 +1,107 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Lisa van der Heijden"
+date: "16-1-2020"
+output: html_document
+---
+# Introduction
+This document contains the final report of the Peer Assessment project from Coursera's course Practical Machine Learning, as part of the Specialization in Data Science. This analysis meant to be the basis for a final quiz where predictions have to be made about 20 cases. The primary goal for this project was to prodict the manner in which 6 participants performed exercise as described below. 
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3xsbS5bVX 
+
+# Setting up the environment 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) # empty global environment
+```
+
+```{r required package}
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(rattle)
+```
+
+```{r setting the seed}
+set.seed(12345)
+```
+
+# Data loading and cleaning 
+```{r reading in the data}
+urlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Reading the datafiles
+training <- read.csv(urlTrain)
+testing <- read.csv(urlTest)
+```
+
+
+```{r data cleaning}
+str(training)
+```
+There are a lot of missing variables in the data. Columns were more than 5% of the data is missing will be excluded from the dataset. The dataset also includes several indentification columns that also can be removed. 
+
+```{r data cleaning part 2}
+#Removing columns >20% NAs
+removeCOL   <- sapply(training, function(x) mean(is.na(x)) > 0.95) 
+
+training <- training[ ,removeCOL == FALSE]
+
+# Remove identification columns
+training <- training[, -(1:5)]
+# Remove empty columns 
+training <- training[, -c(7:15, 38:43, 47:55, 69:77)] 
+```
+
+Next the training dataset needs to be split up in a training set and a testing set, because the above testing set will be used for the quiz. 
+```{r partition of training set}
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+traindat <- training[inTrain,]
+testdat <- training[-inTrain,]
+```
+
+# Model fitting 
+To predict the classe variable, we will fit three models: 1) Decision tree, 2) random forest, and 3) Generalised Boosted Model. For each model the acuracy for prediction for the testing subset of the training dataset will be calculate. The model with the highest acuracy will be used to predict classe in the test datset. 
+
+## Fitting a trees model 
+```{r trees model}
+set.seed(12345)
+mod1 <- train(classe ~., method = "rpart", data = traindat)
+fancyRpartPlot(mod1$finalModel)
+```
+
+## Fitting a random forest model
+```{r random forest model}
+set.seed(12345)
+mod2 <- train(classe ~., data = traindat,  method = "rf")
+```
+
+## Fitting a generalised boosted model 
+```{r generalised boosted model}
+set.seed(12345)
+mod3 <- train(classe ~., method = "gbm", data = traindat, verbose = FALSE)
+```
+
+## Calculating the out-sample accuracy
+```{r out-sample accuracy}
+acuracy_mod1 <- confusionMatrix(testdat$classe, 
+                                predict(mod1, newdata = testdat))$overal[1]
+acuracy_mod2 <- confusionMatrix(testdat$classe, 
+                                predict(mod2, newdata = testdat))$overal[1]
+acuracy_mod3 <- confusionMatrix(testdat$classe,
+                                predict(mod3, newdata = testdat))$overal[1]
+
+data.frame(model = c("trees", "random forest", "generalised boosted model"),
+           acuracy = c(acuracy_mod1, acuracy_mod2, acuracy_mod3))
+```
+
+The random forest model has the highest acuracy. Therefore, this model will be used to predict the class variable in the test dataset. 
+# Predicting the test dataset 
+```{r predicting the test dataset}
+test_pred <- predict(mod2, newdata = testing)
+test_pred 
+```
